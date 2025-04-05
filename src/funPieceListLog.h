@@ -58,6 +58,9 @@ class PiecewisePoissonLossLog {
      double *best_mean,
      int *data_i,
      double *prev_log_mean);
+  
+  // New method for unconstrained minimization:
+  void set_to_unconstrained_min_of(PiecewisePoissonLossLog *input, int verbose);
 };
 
 bool sameFuns(PoissonLossPieceListLog::iterator, PoissonLossPieceListLog::iterator);

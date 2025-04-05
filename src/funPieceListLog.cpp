@@ -599,6 +599,25 @@ void PiecewisePoissonLossLog::set_to_min_more_of
   }
 }
 
+// New method for unconstrained minimization: compute a constant piece representing the minimum cost.
+void PiecewisePoissonLossLog::set_to_unconstrained_min_of(PiecewisePoissonLossLog *input, int verbose) {
+  double best_cost = INFINITY;
+  double best_log_mean = 0.0;
+  for(auto it = input->piece_list.begin(); it != input->piece_list.end(); it++){
+    double mid = (it->min_log_mean + it->max_log_mean) / 2;
+    double cost = it->getCost(mid);
+    if(cost < best_cost){
+      best_cost = cost;
+      best_log_mean = mid;
+    }
+  }
+  double overall_min = input->piece_list.front().min_log_mean;
+  double overall_max = input->piece_list.back().max_log_mean;
+  this->piece_list.clear();
+  // Create a constant piece with zero slopes.
+  this->piece_list.emplace_back(0, 0, best_cost, overall_min, overall_max, PREV_NOT_SET, best_log_mean);
+}
+
 void PiecewisePoissonLossLog::add(double Linear, double Log, double Constant){
   PoissonLossPieceListLog::iterator it;
   for(it=piece_list.begin(); it != piece_list.end(); it++){

@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <stdio.h>
+#include <algorithm> // Added to make std::reverse available
 #include "funPieceListLog.h"
 #include <math.h>
 #include <R.h> // for Rprintf
