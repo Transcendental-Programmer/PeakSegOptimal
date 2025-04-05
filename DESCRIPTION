@@ -23,3 +23,4 @@ Suggests:
  cosegData,
  ggplot2, testthat, data.table (>= 1.9.8)
 Remotes: tdhock/cosegData
+RoxygenNote: 7.3.2
