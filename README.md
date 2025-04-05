@@ -1,4 +1,4 @@
-# PeakSegOptimal - Hard Test Branch
+# PeakSegOptimal - Medium Test Branch
 
 This branch implements rigorous testing for the unconstrained optimal partitioning algorithm with Poisson loss, focusing on challenging edge cases and numerical stability.
 
