@@ -1,176 +1,213 @@
-# PeakSegOptimal
+# PeakSegOptimal - Hard Test Branch
 
-The **PeakSegOptimal** repository now includes several important modifications and new features that improve the range of segmentation models available for count data. In particular, we have implemented an unconstrained optimal partitioning solver for the Poisson loss model that does not enforce the up-down (alternating) constraints required by the previous FPOP solver. This new solver computes the optimal segmentation without restrictions on the direction of changes, making it more flexible when the data do not follow a strict peak–valley structure.
+This branch implements rigorous testing for the unconstrained optimal partitioning algorithm with Poisson loss, focusing on challenging edge cases and numerical stability.
 
-Below is an overview of the changes made, details about usage, commands, expected outputs, time complexities, and test instructions.
+## Environment Setup
 
----
+### Setting Up with renv
 
-## Summary of Changes
+1. Clone the repository and checkout the master branch:
+   ```bash
+   git clone https://github.com/Transcendental-Programmer/PeakSegOptimal.git
+   cd PeakSegOptimal
+   git checkout master
+   ```
 
-- **New Unconstrained Solver:**
-  - Implemented a new method `PiecewisePoissonLossLog::set_to_unconstrained_min_of` in the `funPieceListLog` module.
-  - Added a new C++ function called `PeakSegUnconstrainedLog` which uses dynamic programming (DP) and cumulative sums to solve the optimal partitioning problem with Poisson loss _without any constraints_.
-  - Unlike the constrained solver (implemented in `PeakSegFPOPLog.cpp`), which computes two sets (up and down) of cost functions (resulting in an N×2 array), the unconstrained solver produces a single state cost array of size N.
-  - The unconstrained algorithm directly computes a constant piece representing the minimum cost function, leading to a final segmentation that uses dynamic programming with a double loop—yielding O(n²) worst-case time complexity.
+2. Initialize the renv environment:
+   ```r
+   install.packages("renv")
+   renv::init()
+   ```
 
-- **Interface Updates:**
-  - The `interface.cpp` file now includes an R interface for the unconstrained solver (`PeakSegUnconstrainedLog_interface`). This makes the new solver available in R with a call like `PeakSegUnconstrainedLog(...)`.
-  - The new interface functions ensure that if the inputs do not allow a valid segmentation (e.g., all counts are equal to zero), an appropriate error is thrown.
+3. Install required packages:
+   ```r
+   renv::install("devtools")
+   renv::install("testthat")
+   renv::install("data.table")
+   renv::install("ggplot2")
+   ```
 
-- **Testing:**
-  - Extensive `testthat` tests were added under the `tests/testthat` directory to compare the behavior of the unconstrained model against expected outcomes:
-    - Basic functionality ensuring that without penalty every data point is segmented.
-    - Edge cases, such as constant values, very high penalties (yielding a single segment), and weights affecting the segmentation.
-    - A direct comparison with the constrained solver (`PeakSegFPOP`), ensuring that the unconstrained cost is lower or equal.
-  - The tests also check that the unconstrained solver allows consecutive similar changes (up–up or down–down), which is not possible with the constrained model.
+### Installing the Package
 
-- **Documentation:**
-  - This README summarizes the changes along with detailed usage instructions.
-  - The implementation was inspired by previous work (see Maidstone et al. 2016) and the code in `PeakSegFPOPLog.cpp`.
-  - For further details on the original segmentation approach, see the included documentation reference block (also appended as an Rd file).
-
----
-
-## Unconstrained Segmentation Model
-
-This implementation introduces an optimal partitioning algorithm for the Poisson loss without enforcing up–down constraints. It uses dynamic programming with efficient backtracking and has been benchmarked against the constrained FPOP method.
-
----
-
-## How to Use
-
-### In R
-
-The new optimal partitioning solver for the unconstrained Poisson loss can be called directly using the R function:
+Build and install the package from source:
 
 ```r
-# Example usage for unconstrained segmentation:
-count.vec <- as.integer(c(1, 10, 14, 13))
-fit <- PeakSegUnconstrainedLog(count.vec, penalty = 0.1)
-
-# Extract segmentation results
-segments <- data.frame(
-  start = c(1, fit$ends.vec[fit$ends.vec > 0] + 1),
-  end = c(fit$ends.vec[fit$ends.vec > 0], length(count.vec))
-)
-segments$mean <- fit$mean.vec[1:nrow(segments)]
-print(segments)
+devtools::build()
+devtools::install()
 ```
 
-### R Interface and Commands
-
-- **Constrained Solver:** Available via `PeakSegFPOPLog` (and its corresponding R interface function `PeakSegFPOP`).
-- **Unconstrained Solver:** Available via `PeakSegUnconstrainedLog`.  
-- The underlying C/C++ functions communicate with R through the `.C` interface, and the results are returned in a list containing:
-  - `cost.mat`: Optimal Poisson loss computed for each end point.
-  - `ends.vec`: Optimal segmentation end points (1-indexed in R).
-  - `mean.vec`: Segment means for the optimal partition.
-  - `intervals.mat`: Number of intervals stored by the algorithm.
-
-All results (segmentation parameters and losses) are stored in these arrays and can be further processed or plotted.
-
-### Additional Setup, Testing, Benchmarking & Model Selection Instructions
-
-1. **Development Setup**
-   - Build package:  
-     ```r
-     devtools::build()
-     ```
-   - Install package:  
-     ```r
-     devtools::install()
-     ```
-   - Check package:  
-     ```r
-     devtools::check()
-     ```
-
-2. **Running Tests**
-   - Run tests using testthat:  
-     ```r
-     library(testthat)
-     test_dir("tests/testthat")
-     ```
-   - Or run tests with devtools:  
-     ```r
-     devtools::test()
-     ```
-
-3. **Benchmarking & Model Selection**
-   - Run the benchmarking script:  
-     ```r
-     source("tests/benchmark.R")
-     ```
-   - For model selection, if using a dedicated script (e.g., model-selection-compare.R):  
-     ```r
-     source("tests/model-selection-compare.R")
-     ```
-   - These scripts generate synthetic data, compare constrained vs. unconstrained segmentation, and create runtime and cost comparison plots.
-
-4. **Using the New Algorithm**
-   - Use the R interface for the new unconstrained segmentation as follows:
-     ```r
-     count.vec <- as.integer(c(1, 10, 14, 13))
-     fit <- PeakSegUnconstrainedLog(count.vec, penalty = 0.1)
-     segments <- data.frame(
-       start = c(1, fit$ends.vec[fit$ends.vec > 0] + 1),
-       end = c(fit$ends.vec[fit$ends.vec > 0], length(count.vec))
-     )
-     segments$mean <- fit$mean.vec[1:nrow(segments)]
-     print(segments)
-     ```
-
-### Running Tests
-
-The repository now uses the **testthat** package. To run the tests, use the command from the repository root in R:
+Verify the installation was successful:
 
 ```r
-library(testthat)
-test_dir("tests/testthat")
+library(PeakSegOptimal)
 ```
 
-This will run the suite of tests ensuring that:
-- Basic functionality and edge cases are handled correctly.
-- The unconstrained solver provides a segmentation that is at least as good as the constrained one (in terms of cost).
-- Segmentation outputs match expected behavior compared to the Segmentor3IsBack package for model selection.
+## Running Tests
 
-### Testing Unconstrained Algorithm
+Follow these steps to run the tests and examine the results:
 
-To run tests for the new unconstrained algorithm only, execute:
-```bash
-Rscript -e "library(testthat); test_file('tests/testthat/test-PeakSegUnconstrainedLog.R')"
-```
+1. **Run all tests**: This will execute all test files including the hard tests.
+   ```r
+   library(testthat)
+   test_dir("tests/testthat")
+   ```
+   You should see test results showing passed, failed, and skipped tests.
 
-### Benchmarking & Model Selection
+2. **Run specific unconstrained segmentation tests**:
+   ```r
+   test_file("tests/testthat/test-PeakSegUnconstrainedLog.R")
+   ```
+   This will show detailed results for just the unconstrained tests.
 
-A benchmarking script `model-selection-compare.R` is provided which:
-- Generates synthetic data with multiple peaks.
-- Varies the penalty parameter to perform model selection.
-- Uses **ggplot2** to visualize the number of segments and cost versus penalty (on a log scale).
-- Saves the visualization results to a PDF (`model-comparison-results.pdf`).
+3. **Test specific edge cases**: If you want to focus on particular edge cases:
+   ```r
+   test_file("tests/testthat/test-PeakSegUnconstrainedLog.R", filter="edge cases")
+   ```
+   This will only run tests with "edge cases" in their description.
 
-There is also a `benchmark.R` test script under the tests folder to compare runtimes for different data sizes. Note:
+4. **Benchmark performance**:
+   ```r
+   source("tests/benchmark.R")
+   ```
+   This will generate performance comparison plots and print metrics.
 
-- The constrained FPOP algorithm is O(n) in time.
-- The newly implemented unconstrained solver runs in O(n²) time due to its double loop in the dynamic programming stage.
+5. **Model selection comparison**:
+   ```r
+   source("model-selection-compare.R")
+   ```
+   This will compare model selection behavior across different penalty values.
 
-Given this, while the unconstrained solver is more flexible, it may be slower for very large datasets.
+## Output Files and Results
 
----
+When running the tests and benchmark scripts, you'll find outputs in these locations:
 
-## Background and Reference
+1. **Test Results**: When using `test_dir()` or `test_file()`, test results are displayed in the R console. Detailed test logs can be found in:
+   ```
+   tests/testthat/test-results/
+   ```
 
-The original challenge was inspired by a need to implement an optimal partitioning method to compute the best K-segment model for a single penalty parameter without constraints. The unconstrained solver was modeled after the FPOP algorithm described in [Maidstone et al. (2016)](http://link.springer.com/article/10.1007/s11222-016-9636-3?wt_mc%3Dinternal.event.1.SEM.ArticleAuthorOnlineFirst). In contrast to the constrained approach (with up and down states and N×2 cost functions), the unconstrained solver computes just one set of cost functions (of size N) by calculating a constant piece representing the overall minimum.
+2. **Benchmark Results**: Running the benchmark script generates visualizations saved at:
+   ```
+   tests/benchmark-results/timing-comparison.pdf
+   tests/benchmark-results/segmentation-comparison.pdf
+   ```
 
-The Segmentor3IsBack package implements the segment neighborhood model (best models in 1,...,K segments) for the Poisson loss with no constraints, however no implementation was originally available for the optimal partitioning model (best model for a single penalty parameter). This repository extends the work by implementing the missing solver and verifying it against the Segmentor3IsBack output for model selection.
+3. **Model Selection Outputs**: The model selection script saves plots and data to:
+   ```
+   model-selection-results/model-comparison-plot.pdf
+   model-selection-results/segment-counts.csv
+   ```
 
----
+4. **Function Examples**: Example outputs from the included example functions are displayed in the R console and can be saved to your working directory by assigning the plot outputs.
 
-## Conclusion
+## Approach
 
-This update to **PeakSegOptimal** provides users with a more general segmentation tool through the unconstrained optimal partitioning solver. Users can now perform model selection over a range of penalty values, compare outputs between constrained (FPOP) and unconstrained models, and apply segmentation to various types of count data. Remember that while the unconstrained solver offers increased flexibility, it has a higher computational cost (O(n²)) compared to the O(n) constrained solver.
+The hard_test branch extends the unconstrained optimal partitioning algorithm with:
 
-For any further questions or issues, please refer to the [BugReports](https://github.com/tdhock/PeakSegOptimal/issues) page.
+1. **Robust dynamic programming**: The implementation uses a more numerically stable approach to backtracking that handles cases where conventional dynamic programming might fail.
 
-Happy Segmenting!
+2. **Edge case handling**: Special cases that could cause numerical issues (like zero counts, constant values, or extreme penalties) are explicitly handled.
+
+3. **Comprehensive testing**: Tests include challenging scenarios that stress the numerical stability of the segmentation algorithms.
+
+4. **Performance validation**: Benchmarks ensure the unconstrained solver performs as expected even in difficult cases.
+
+The core algorithm still uses dynamic programming with O(n²) time complexity, but with improved numerical stability.
+
+## Implementation for Medium Test Problem
+
+### Medium Test Challenge
+The Segmentor3IsBack package implements the segment neighborhood model (best models in 1,...,K segments) for the Poisson loss and no constraints, but there is no implementation available for the optimal partitioning model (best K-segment model for a single penalty parameter, without computing the models with 1,...,K-1 segments). The goal of this test is to modify the code in the `PeakSegOptimal` package, in order to implement a solver for the optimal partitioning problem with Poisson loss and no constraints. Begin by studying [PeakSegFPOPLog.cpp](https://github.com/tdhock/coseg/blob/master/src/PeakSegFPOPLog.cpp) which implements the optimal partitioning model for the Poisson loss and the up-down constraints. There are two states in this model, up and down.  Since the up-down constrained solver has two states, there are N x 2 optimal cost functions to compute (`cost_model_mat` is of dimension `data_count*2`). The cost of being in the up state at `data_i` is `cost_model_mat[data_i]` and the cost of being in the down state is `cost_model_mat[data_i+data_count]`. The `min_prev_cost.set_to_min_less_of(down_cost_prev)` method enforces a non-decreasing constraint between adjacent segment means, for the state change down->up. Analogously, the `PiecewisePoissonLossLog::set_to_min_more_of` method enforces a non-increasing constraint for the state change up->down. To implement the unconstrained solver, you just need to implement a new `PiecewisePoissonLossLog::set_to_unconstrained_min_of` method that computes the minimum constant cost function (one `PoissonLossPieceLog` object), and then uses that to compute the N x 1 array of optimal cost functions (`cost_model_mat`). Read about the FPOP algorithm in [Maidstone et al 2016](http://link.springer.com/article/10.1007/s11222-016-9636-3?wt_mc%3Dinternal.event.1.SEM.ArticleAuthorOnlineFirst) for more info. When you are done with your implementation, check your work by comparing with the output of `Segmentor3IsBack::Segmentor(model=1)`. Perform model selection yourself for a range of penalty parameters. Using `testthat`, write some test cases which make sure your function gives the same exact model as the corresponding selected Segmentor model.
+
+### File-by-File Solution Implementation
+
+Our implementation solves the medium test problem across several files:
+
+- **src/funPieceListLog.cpp/h**: 
+  - Added the key method `set_to_unconstrained_min_of()` which computes the minimum constant cost function (one `PoissonLossPieceLog` object)
+  - This is the core method that removes the constraints between segment means
+
+- **src/PeakSegUnconstrainedLog.cpp**:
+  - Implements the dynamic programming algorithm for the optimal partitioning problem with no constraints
+  - Uses cumulative sums and backtracking to efficiently compute and decode segments
+  - Handles special cases (high/low penalties, constant values) for numerical stability
+  - Differs from constrained version by using a simpler O(n²) algorithm with single N x 1 cost array
+
+- **src/interface.cpp**:
+  - Added `PeakSegUnconstrainedLog_interface` to connect the C++ implementation with R
+  - Provides error handling consistent with other functions in the package
+
+- **R/PeakSegUnconstrainedLog.R**:
+  - User-friendly R interface to the C++ implementation
+  - Provides proper data validation and conversion between R and C++ data structures
+  - Also includes a genomic data interface (`PeakSegUnconstrainedChrom`)
+
+- **tests/testthat/test-PeakSegUnconstrainedLog.R**:
+  - Tests basic functionality, edge cases, and weighted loss
+  - Crucially compares unconstrained to constrained models to verify the unconstrained version produces equal or lower cost
+  - Verifies that consecutive up-up or down-down changes are possible in the unconstrained model
+
+- **model-selection-compare.R and tests/benchmark.R**:
+  - Implements model selection across penalty values
+  - Benchmarks performance comparing constrained vs. unconstrained algorithms
+  - Generates visualizations of results for documentation and analysis
+
+## File Changes
+
+### Core Implementation
+
+- **src/PeakSegUnconstrainedLog.cpp**: 
+  - New implementation of the unconstrained optimal partitioning algorithm
+  - Handles special cases for extreme penalty values and numerical stability
+  - Implements efficient backtracking for segment reconstruction
+
+- **src/funPieceListLog.cpp/h**:
+  - Added `set_to_unconstrained_min_of()` method for computing constant pieces
+  - Enhanced root-finding and numerical stability
+
+- **src/interface.cpp**:
+  - Added `PeakSegUnconstrainedLog_interface` for R integration
+  - Error handling for edge cases
+
+### R Interface
+
+- **R/PeakSegUnconstrainedLog.R**:
+  - User-facing functions for unconstrained segmentation
+  - Implementation of `PeakSegUnconstrainedLog()` and `PeakSegUnconstrainedChrom()`
+  - Proper conversion between C++ and R data structures
+
+### Tests and Benchmarks
+
+- **tests/testthat/test-PeakSegUnconstrainedLog.R**:
+  - Comprehensive edge case testing
+  - Comparison with constrained models
+  - Validation of mathematical properties
+
+- **tests/benchmark.R**:
+  - Performance comparison between constrained and unconstrained algorithms
+  - Tests across different data sizes
+
+- **model-selection-compare.R**:
+  - Assessment of model selection behavior with different penalty values
+
+### Documentation
+
+- **man/PeakSegUnconstrainedLog.Rd**:
+  - Complete documentation of the new functions
+  - Examples showing typical usage
+
+## Contributing
+
+For contributing to this branch:
+
+1. Run the test suite to ensure stability: `devtools::test()`
+2. Add new edge cases to the relevant test files
+3. Document any numerical issues encountered
+
+## License
+
+This project is licensed under GPL-3 - see the LICENSE file for details.
+
+## Acknowledgements
+
+Based on the algorithms described in Maidstone et al. (2016) "On optimal multiple changepoint algorithms for large data".
