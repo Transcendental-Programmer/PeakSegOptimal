@@ -3,6 +3,7 @@
 #include "funPieceListLog.h"
 #include "PeakSegPDPALog.h"
 #include "PeakSegFPOPLog.h"
+#include "IsotonicRegressionNormal.h" // Added include for IsotonicRegressionNormal
 #include <R.h>
 #include <R_ext/Rdynload.h>
 
@@ -58,6 +59,17 @@ void PeakSegUnconstrainedLog_interface
   }
 }
 
+void IsotonicRegressionNormal_interface
+(double *data_vec, double *weight_vec, int *data_count,
+ double *penalty,
+ double *cost_vec, int *end_vec, double *mean_vec,
+ int *status){
+  *status = IsotonicRegressionNormal
+    (data_vec, weight_vec, *data_count,
+     *penalty,
+     cost_vec, end_vec, mean_vec);
+}
+
 R_CMethodDef cMethods[] = {
   {"PeakSegPDPALog_interface",
    (DL_FUNC) &PeakSegPDPALog_interface, 8
@@ -70,6 +82,9 @@ R_CMethodDef cMethods[] = {
   },
   {"PeakSegUnconstrainedLog_interface",
    (DL_FUNC) &PeakSegUnconstrainedLog_interface, 8
+  },
+  {"IsotonicRegressionNormal_interface",
+   (DL_FUNC) &IsotonicRegressionNormal_interface, 8
   },
   {NULL, NULL, 0}
 };

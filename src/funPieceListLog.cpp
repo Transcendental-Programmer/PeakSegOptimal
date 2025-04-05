@@ -1227,3 +1227,471 @@ void PiecewisePoissonLossLog::push_piece
        it->data_i, it->prev_log_mean);
   }
 }
+
+/* -*- compile-command: "R CMD INSTALL .." -*- */
+
+NormalLossPiece::NormalLossPiece
+(double q, double l, double c, double min_m, double max_m, int i, double prev){
+  Quadratic = q;
+  Linear = l;
+  Constant = c;
+  min_mean = min_m;
+  max_mean = max_m;
+  data_i = i;
+  prev_mean = prev;
+}
+
+NormalLossPiece::NormalLossPiece(){
+}
+
+double NormalLossPiece::getCost(double mean){
+  return Quadratic*mean*mean + Linear*mean + Constant;
+}
+
+double NormalLossPiece::getDeriv(double mean){
+  return 2*Quadratic*mean + Linear;
+}
+
+double NormalLossPiece::argmin(){
+  // f(m) = Quadratic*m^2 + Linear*m + Constant
+  // f'(m) = 2*Quadratic*m + Linear = 0
+  // m = -Linear/(2*Quadratic)
+  if(Quadratic <= 0){
+    // If quadratic term is not positive, function is not strictly convex
+    // Return the bound that gives lower cost
+    double min_cost = getCost(min_mean);
+    double max_cost = getCost(max_mean);
+    if(min_cost <= max_cost){
+      return min_mean;
+    }else{
+      return max_mean;
+    }
+  }
+  double m = -Linear/(2*Quadratic);
+  // Check if minimum is within bounds
+  if(m < min_mean){
+    return min_mean;
+  }
+  if(max_mean < m){
+    return max_mean;
+  }
+  return m;
+}
+
+void NormalLossPiece::print(){
+  Rprintf("%.20e %.20e %.20e %15f %15f %15f %d\n",
+         Quadratic, Linear, Constant,
+         min_mean, max_mean,
+         prev_mean, data_i);
+}
+
+bool NormalLossPiece::has_two_roots(double equals){
+  // For a quadratic function to have two roots:
+  // discriminant = Linear^2 - 4*Quadratic*(Constant - equals) must be positive
+  if(Quadratic == 0){
+    // Linear*mean + Constant = equals
+    // If Linear is nonzero, only one solution
+    return false;
+  }
+  double discriminant = Linear*Linear - 4*Quadratic*(Constant - equals);
+  return discriminant > 0;
+}
+
+double NormalLossPiece::get_smaller_root(double equals){
+  if(Quadratic == 0){
+    // Linear case: Linear*mean + Constant = equals
+    if(Linear == 0){
+      // If Linear and Quadratic are both 0, no solution or infinitely many
+      return min_mean; // Default to minimum bound
+    }
+    // One solution: mean = (equals - Constant)/Linear
+    double root = (equals - Constant)/Linear;
+    if(root < min_mean){
+      return min_mean - 1; // Return value outside the interval
+    }
+    if(max_mean < root){
+      return max_mean; // Clamp to max if root is outside
+    }
+    return root;
+  }
+  
+  // Normal quadratic case
+  double discriminant = Linear*Linear - 4*Quadratic*(Constant - equals);
+  if(discriminant < 0){
+    // No real roots
+    return min_mean - 1; // Return value outside the interval
+  }
+  
+  double sqrtDiscriminant = sqrt(discriminant);
+  double twoQuadratic = 2*Quadratic;
+  double smaller = (-Linear - sqrtDiscriminant) / twoQuadratic;
+  double larger = (-Linear + sqrtDiscriminant) / twoQuadratic;
+  
+  // If Quadratic < 0, the roots are reversed
+  if(Quadratic < 0){
+    double temp = smaller;
+    smaller = larger;
+    larger = temp;
+  }
+  
+  // Check if smaller root is within bounds
+  if(smaller < min_mean){
+    return min_mean - 1; // Return value outside the interval
+  }
+  if(max_mean < smaller){
+    return max_mean; // Clamp to max if outside
+  }
+  
+  return smaller;
+}
+
+double NormalLossPiece::get_larger_root(double equals){
+  if(Quadratic == 0){
+    // Linear case already handled in get_smaller_root
+    return max_mean + 1; // Return value outside the interval
+  }
+  
+  // Normal quadratic case
+  double discriminant = Linear*Linear - 4*Quadratic*(Constant - equals);
+  if(discriminant < 0){
+    // No real roots
+    return max_mean + 1; // Return value outside the interval
+  }
+  
+  double sqrtDiscriminant = sqrt(discriminant);
+  double twoQuadratic = 2*Quadratic;
+  double smaller = (-Linear - sqrtDiscriminant) / twoQuadratic;
+  double larger = (-Linear + sqrtDiscriminant) / twoQuadratic;
+  
+  // If Quadratic < 0, the roots are reversed
+  if(Quadratic < 0){
+    double temp = smaller;
+    smaller = larger;
+    larger = temp;
+  }
+  
+  // Check if larger root is within bounds
+  if(larger < min_mean){
+    return min_mean; // Clamp to min if outside
+  }
+  if(max_mean < larger){
+    return max_mean + 1; // Return value outside the interval
+  }
+  
+  return larger;
+}
+
+void PiecewiseNormalLoss::set_to_min_less_of
+(PiecewiseNormalLoss *input, int verbose){
+  piece_list.clear();
+  NormalLossPieceList::iterator it = input->piece_list.begin();
+  NormalLossPieceList::iterator next_it;
+  double prev_min_cost = INFINITY;
+  double prev_min_mean = it->min_mean;
+  double prev_best_mean;
+  
+  while(it != input->piece_list.end()){
+    double left_cost = it->getCost(it->min_mean);
+    double right_cost = it->getCost(it->max_mean);
+    if(verbose) Rprintf("left_cost=%f right_cost=%f\n", left_cost, right_cost);
+    
+    if(prev_min_cost == INFINITY){
+      // Look for minimum achieved in this interval
+      if(verbose){
+        Rprintf("Searching for min in\n");
+        it->print();
+      }
+      double next_left_cost;
+      next_it = it;
+      next_it++;
+      
+      if(it->Quadratic == 0){
+        // Linear function case
+        if(verbose) Rprintf("LINEAR FUNCTION IN MIN LESS\n");
+        double slope_diff = right_cost - left_cost;
+        if(verbose) Rprintf("right_cost-left_cost=%e\n", slope_diff);
+        bool flat_segment = fabs(slope_diff) < NEWTON_EPSILON;
+        bool next_cost_more_than_left;
+        
+        if(next_it == input->piece_list.end()){
+          next_cost_more_than_left = true;
+        } else {
+          next_left_cost = next_it->getCost(next_it->min_mean);
+          double next_left_diff = next_left_cost - left_cost;
+          if(verbose) Rprintf("next_left_cost-left_cost=%e\n", next_left_diff);
+          next_cost_more_than_left = NEWTON_EPSILON < next_left_diff;
+        }
+        
+        if(it->Linear >= 0){
+          // Increasing or flat function
+          if(next_cost_more_than_left){
+            // Store minimum at left endpoint
+            prev_min_cost = left_cost;
+            prev_best_mean = it->min_mean;
+            if(verbose){
+              Rprintf("Increasing linear segment, storing min at left: %f\n", left_cost);
+            }
+          } else {
+            // Store this constant/increasing segment
+            piece_list.emplace_back(
+              it->Quadratic, it->Linear, it->Constant,
+              prev_min_mean, it->max_mean,
+              PREV_NOT_SET, INFINITY);
+            prev_min_mean = it->max_mean;
+          }
+        } else {
+          // Decreasing linear function - should not happen with isotonic constraint
+          // but handle it anyway
+          piece_list.emplace_back(
+            it->Quadratic, it->Linear, it->Constant,
+            prev_min_mean, it->max_mean,
+            PREV_NOT_SET, INFINITY);
+          prev_min_mean = it->max_mean;
+        }
+      } else {
+        // Quadratic case
+        double mu = it->argmin();
+        double mu_cost = it->getCost(mu);
+        bool next_ok;
+        
+        if(next_it == input->piece_list.end()){
+          next_ok = true;
+        } else {
+          next_left_cost = next_it->getCost(next_it->min_mean);
+          next_ok = NEWTON_EPSILON < next_left_cost - mu_cost;
+        }
+        
+        if(verbose){
+          Rprintf("min cost=%f at mean=%f\n", mu_cost, mu);
+          Rprintf("next_left_cost-mu_cost=%e right_cost-mu_cost=%e\n", 
+                  next_left_cost-mu_cost, right_cost-mu_cost);
+        }
+        
+        bool cost_ok = NEWTON_EPSILON < right_cost-mu_cost && next_ok;
+        
+        if(mu <= it->min_mean && cost_ok){
+          // Minimum is before or at the left end
+          if(verbose) Rprintf("min before/at left end of interval\n");
+          prev_min_cost = left_cost;
+          prev_best_mean = it->min_mean;
+        } else if(mu < it->max_mean && cost_ok){
+          // Minimum in this interval
+          if(verbose){
+            Rprintf("min in this interval at mean=%f cost=%f\n", mu, mu_cost);
+          }
+          
+          if(prev_min_mean < mu){
+            // Add convex piece up to minimum
+            piece_list.emplace_back(
+              it->Quadratic, it->Linear, it->Constant, 
+              prev_min_mean, mu,
+              PREV_NOT_SET, INFINITY); 
+          }
+          
+          prev_min_mean = mu;
+          prev_best_mean = mu;
+          prev_min_cost = mu_cost;
+          
+        } else {
+          // Minimum after this interval
+          if(verbose) Rprintf("min after interval\n");
+          piece_list.emplace_back(
+            it->Quadratic, it->Linear, it->Constant,
+            prev_min_mean, it->max_mean,
+            PREV_NOT_SET, INFINITY);
+          prev_min_mean = it->max_mean;
+        }
+      }
+    } else {
+      // We have a finite prev_min_cost, look for intersection
+      if(verbose){
+        Rprintf("Searching for intersection with %f\n", prev_min_cost);
+        Rprintf("cost at limits=[%f,%f] cost-constant=[%e,%e]\n",
+               left_cost, right_cost,
+               left_cost-prev_min_cost, right_cost-prev_min_cost);
+        it->print();
+      }
+      
+      if(it->has_two_roots(prev_min_cost)){
+        // Find where the quadratic piece intersects with prev_min_cost
+        double mu = it->get_smaller_root(prev_min_cost);
+        if(it->min_mean < mu && mu < it->max_mean){
+          // The intersection is within the interval
+          piece_list.emplace_back(
+            0, 0, prev_min_cost,
+            prev_min_mean, mu, PREV_NOT_SET,
+            prev_best_mean);
+          prev_min_cost = INFINITY;
+          prev_min_mean = mu;
+          it--;
+        }
+      }
+      
+      if(right_cost <= prev_min_cost+NEWTON_EPSILON && prev_min_cost < INFINITY){
+        // Ends exactly at the right
+        if(verbose) Rprintf("constant numerically equal on right\n");
+        piece_list.emplace_back(
+          0, 0, prev_min_cost,
+          prev_min_mean, it->max_mean, 
+          PREV_NOT_SET,
+          prev_best_mean);
+        prev_min_cost = INFINITY;
+        prev_min_mean = it->max_mean;
+      }
+    }
+    
+    it++;
+    if(verbose){
+      Rprintf("current min-less-------------------\n");
+      print();
+    }
+  }
+  
+  if(prev_min_cost < INFINITY){
+    // Ending on a constant piece
+    it--;
+    piece_list.emplace_back(
+      0, 0, prev_min_cost,
+      prev_min_mean, it->max_mean, PREV_NOT_SET,
+      prev_best_mean);
+  }
+}
+
+void PiecewiseNormalLoss::print(){
+  NormalLossPieceList::iterator it;
+  Rprintf("%10s %10s %15s %15s %15s %15s %s\n",
+         "Quadratic", "Linear", "Constant",
+         "min_mean", "max_mean",
+         "prev_mean", "data_i");
+  for(it=piece_list.begin(); it != piece_list.end(); it++){
+    it->print();
+  }
+}
+
+void PiecewiseNormalLoss::add(double Quadratic, double Linear, double Constant){
+  NormalLossPieceList::iterator it;
+  for(it=piece_list.begin(); it != piece_list.end(); it++){
+    it->Quadratic += Quadratic;
+    it->Linear += Linear;
+    it->Constant += Constant;
+  }
+}
+
+void PiecewiseNormalLoss::multiply(double x){
+  NormalLossPieceList::iterator it;
+  for(it=piece_list.begin(); it != piece_list.end(); it++){
+    it->Quadratic *= x;
+    it->Linear *= x;
+    it->Constant *= x;
+  }
+}
+
+void PiecewiseNormalLoss::set_prev_seg_end(int prev_seg_end){
+  NormalLossPieceList::iterator it;
+  for(it=piece_list.begin(); it != piece_list.end(); it++){
+    it->data_i = prev_seg_end;
+  }
+}
+
+void PiecewiseNormalLoss::findMean(double mean, int *seg_end, double *prev_mean){
+  NormalLossPieceList::iterator it;
+  for(it=piece_list.begin(); it != piece_list.end(); it++){
+    if(it->min_mean <= mean && mean <= it->max_mean){
+      *seg_end = it->data_i;
+      *prev_mean = it->prev_mean;
+      return;
+    }
+  }
+}
+
+double PiecewiseNormalLoss::findCost(double mean){
+  NormalLossPieceList::iterator it;
+  for(it=piece_list.begin(); it != piece_list.end(); it++){
+    if(it->min_mean <= mean && mean <= it->max_mean){
+      return it->getCost(mean);
+    }
+  }
+  return INFINITY;
+}
+
+void PiecewiseNormalLoss::Minimize(double *best_cost, double *best_mean, int *data_i, double *prev_mean){
+  double candidate_cost, candidate_mean;
+  NormalLossPieceList::iterator it;
+  *best_cost = INFINITY;
+  
+  for(it=piece_list.begin(); it != piece_list.end(); it++){
+    candidate_mean = it->argmin();
+    if(candidate_mean < it->min_mean){
+      candidate_mean = it->min_mean;
+    }else if(it->max_mean < candidate_mean){
+      candidate_mean = it->max_mean;
+    }
+    
+    candidate_cost = it->getCost(candidate_mean);
+    if(candidate_cost < *best_cost){
+      *best_cost = candidate_cost;
+      *best_mean = candidate_mean;
+      *data_i = it->data_i;
+      *prev_mean = it->prev_mean;
+    }
+  }
+}
+
+int PiecewiseNormalLoss::check_min_of(PiecewiseNormalLoss *prev, PiecewiseNormalLoss *model){
+  NormalLossPieceList::iterator it;
+  
+  for(it = piece_list.begin(); it != piece_list.end(); it++){
+    if(it != piece_list.begin()){
+      NormalLossPieceList::iterator pit = it;
+      pit--;
+      if(pit->max_mean != it->min_mean){
+        Rprintf("prev->max_mean != it->min_mean min\n");
+        return 3;
+      }
+    }
+    
+    if(it->max_mean <= it->min_mean){
+      Rprintf("max_mean<=min_mean=%15.10f min\n", it->min_mean);
+      return 2;
+    }
+    
+    double mid_mean = (it->min_mean + it->max_mean)/2;
+    double cost_min = it->getCost(mid_mean);
+    double cost_prev = prev->findCost(mid_mean);
+    double cost_model = model->findCost(mid_mean);
+    
+    if(cost_prev+1e-6 < cost_min || cost_model+1e-6 < cost_min){
+      return 1;
+    }
+  }
+  
+  return 0;
+}
+
+void PiecewiseNormalLoss::push_piece(NormalLossPieceList::iterator it, double min_mean, double max_mean){
+  if(max_mean <= min_mean){
+    return;
+  }
+  
+  if(piece_list.size()){
+    NormalLossPieceList::iterator last=piece_list.end();
+    --last;
+    if(sameFunsNormal(last, it) && 
+       it->prev_mean == last->prev_mean &&
+       it->data_i == last->data_i){
+      last->max_mean = max_mean;
+      return;
+    }
+  }
+  
+  piece_list.emplace_back(
+    it->Quadratic, it->Linear, it->Constant,
+    min_mean, max_mean,
+    it->data_i, it->prev_mean);
+}
+
+bool sameFunsNormal(NormalLossPieceList::iterator it1, NormalLossPieceList::iterator it2){
+  return it1->Quadratic == it2->Quadratic && 
+         it1->Linear == it2->Linear && 
+         ABS(it1->Constant - it2->Constant) < NEWTON_EPSILON;
+}

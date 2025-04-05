@@ -24,8 +24,7 @@ PoissonLoss <- structure(function(count, seg.mean, weight=1){
   }
   not.integer <- round(count) != count
   not.positive <- count < 0
-  loss <-
-    ifelse(not.integer|not.positive, Inf,
+  loss <- ifelse(not.integer|not.positive, Inf,
            ifelse(seg.mean == 0,
                   ifelse(count == 0, 0, Inf),
                   seg.mean - count * log(seg.mean)))

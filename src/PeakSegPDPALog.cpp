@@ -38,8 +38,10 @@ int PeakSegPDPALog
     weight_cumsum_vec[data_i] = weight_cumsum;
     data_weight_cumsum += data_vec[data_i]*weight_vec[data_i];
     PiecewisePoissonLossLog *cost_model = &cost_model_vec[data_i];
-    cost_model->piece_list.emplace_back
-      (1.0, -data_weight_cumsum/weight_cumsum, 0.0, min_log_mean, max_log_mean, -1, false);
+    // Use the new interface when constructing function pieces.
+    cost_model->piece_list.emplace_back(
+      1.0, -data_weight_cumsum/weight_cumsum, 0.0,
+      min_log_mean, max_log_mean, -1, false);
   }
 
   // DP: compute functional model of best cost in S segments up to
