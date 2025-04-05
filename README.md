@@ -39,7 +39,7 @@ install.packages(c("devtools", "testthat", "penaltyLearning", "ggplot2", "data.t
 To install the development version from this branch:
 
 ```r
-devtools::install_github("tdhock/PeakSegOptimal", ref = "hard_test")
+devtools::install_github("tdhock/PeakSegOptimal", ref = "master")
 ```
 
 Or from your local clone:
